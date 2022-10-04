@@ -78,6 +78,10 @@ class HSVTreeCountDetector:
 
         # 2.0 Calculate Euclidean Distance from filled contours
         distance = scipy.ndimage.distance_transform_edt(img_filled_cnt)
+	
+        # Handle case where no contours is shortlisted
+        if len(r_list) == 0:
+            return 0, imgOri
 
         # 2.1 Find local maximum
         min_dist_thresh = int(np.median(r_list)) # Calculate minimum distance # 20220914 - change mean to median
@@ -124,6 +128,10 @@ class HSVTreeCountDetector:
                 cv2.rectangle(imgOri, (x, y), (x_bottom, y_bottom), (0, 0, 255), 3)
             else:
                 cv2.rectangle(imgOri, (x, y), (x + w, y + h), (0, 0, 255), 3)
+        
+        # Resize output image - Added 20221004 - Reduce API response time
+        if resize_flag:
+            imgOri = cv2.resize(imgOri, (dim))
 
         return tree_count, imgOri
 
