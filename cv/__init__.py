@@ -44,15 +44,15 @@ class HSVTreeCountDetector:
         min_hsv = np.array([hsv_thresh.h_low, hsv_thresh.s_low, hsv_thresh.v_low])
         max_hsv = np.array([hsv_thresh.h_high, hsv_thresh.s_high, hsv_thresh.v_high])
         thresh = cv2.inRange(hsv, min_hsv, max_hsv)
-
+        
         # Median Blur to remove salt and pepper noise
         thresh = cv2.medianBlur(thresh, 3)
 
         # Morphology closing
         thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (5,5)), iterations = 3)
-
+        
         # Get External contours
-        cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cnts, hierarchy = cv2.findContours(thresh, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE) # Added 20221009 - Change RETR_EXTERNAL to RETR_CCOMP
 
         # List of contour radius
         r_list = []
@@ -61,21 +61,26 @@ class HSVTreeCountDetector:
         img_filled_cnt = np.zeros_like(img)
 
         # First round of contouring
-        for cnt in cnts:
+        for cnt, hierarchy_ in zip(cnts, hierarchy[0]):
             # Remove contour if it's small
             if cv2.contourArea(cnt) < cnt_thresh.min_area:
                 continue
 
             # Append radius to list
-            _, r = cv2.minEnclosingCircle(cnt)
+            _, r = cv2.minEnclosingCircle(cnt) # Commented 20221009 - Use eroded binary image for radius calculation
             r_list.append(r)
 
+            # Fill white for outer contours, otherwise fill black
+            if hierarchy_[3] == -1:
+                FILL_COLOR = (255, 255, 255)
+            else:
+                FILL_COLOR = (0, 0, 0)
             # Create fileld image with contours
-            cv2.drawContours(img_filled_cnt, [cnt], 0, (255, 255, 255), -1)
+            cv2.drawContours(img_filled_cnt, [cnt], 0, FILL_COLOR, -1) # Updated 20221009 - Change FILL_COLOR based on hierarchy level
 
         # Convert filled image to grayscale
         img_filled_cnt = cv2.cvtColor(img_filled_cnt, cv2.COLOR_BGR2GRAY)
-
+        
         # 2.0 Calculate Euclidean Distance from filled contours
         distance = scipy.ndimage.distance_transform_edt(img_filled_cnt)
 	
@@ -84,7 +89,7 @@ class HSVTreeCountDetector:
             return 0, imgOri
 
         # 2.1 Find local maximum
-        min_dist_thresh = int(np.median(r_list)) # Calculate minimum distance # 20220914 - change mean to median
+        min_dist_thresh = int(min(20, np.median(r_list))) # Add min function
         coords = peak_local_max(distance, footprint = np.ones((3,3)), min_distance = min_dist_thresh, labels = img_filled_cnt)
 
         # 2.2 Fill local maximum into mask
@@ -113,9 +118,6 @@ class HSVTreeCountDetector:
                 # cv2.rectangle(img, (x,y), (x + w, y + h), (0, 0, 255), 3) # Commented 20220914 - Move drawing outside the loop
                 tree_count += 1
 
-        # cv2.putText(img, f"Tree Count: {tree_count}",
-        #             (10,60), 0, 2, (0, 0, 255), 5)
-
         for x, y, w, h in box_list:
             if resize_flag:
                 x = int(x/ resize_factor)
@@ -128,7 +130,7 @@ class HSVTreeCountDetector:
                 cv2.rectangle(imgOri, (x, y), (x_bottom, y_bottom), (0, 0, 255), 3)
             else:
                 cv2.rectangle(imgOri, (x, y), (x + w, y + h), (0, 0, 255), 3)
-        
+
         # Resize output image - Added 20221004 - Reduce API response time
         if resize_flag:
             imgOri = cv2.resize(imgOri, (dim))

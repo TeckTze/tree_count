@@ -8,6 +8,8 @@ import numpy as np
 import cv2
 import os
 import datetime
+import random
+import string
 
 # Initialize instance of FastAPI
 app = FastAPI(title = "Tree Counting FastAPI")
@@ -42,7 +44,8 @@ def get_tree_count_response(contents):
     # Save output to disk
     now = datetime.datetime.now()
     now_str = now.strftime('%Y%m%d_%H%M%S')
-    out_file = os.path.join('output', f'output_{now_str}.jpg') # Modified 20220914 - PNG to JPG
+    uuid = ''.join(random.choices(string.ascii_uppercase, k = 8))
+    out_file = os.path.join('output', f'output_{now_str}_{uuid}.jpg') # Modified 20220914 - PNG to JPG
     cv2.imwrite(out_file, imgOut)
 
     # headers
@@ -67,26 +70,8 @@ async def get_tree_count(file: UploadFile = File(...)):
 
     contents = await file.read()
     headers, out_file = get_tree_count_response(contents)
-    # arr = np.fromstring(contents, np.uint8)
-    # img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-
-    ## Predict tree count
-    # tree_count, imgOut = predict_tree_count(img)
-
-    ## Create output folder if not exists
-    # os.makedirs('output', exist_ok = True)
-
-    ## Save output to disk
-    # now = datetime.datetime.now()
-    # now_str = now.strftime('%Y%m%d_%H%M%S')
-    # out_file = os.path.join('output', f'output_{now_str}.png')
-    # cv2.imwrite(out_file, imgOut)
-    
-    ## headers
-    # headers = {'tree_count': str(tree_count)}
     
     return headers
-    # return FileResponse(out_file, headers = headers)
 
 @app.post("/predict/tree_bbox")
 async def get_tree_bbox(file: UploadFile = File(...)):
