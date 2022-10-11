@@ -31,8 +31,8 @@ class HSVTreeCountDetector:
         imgOri = img.copy()
 
         # Get resize flag and factor
-        resize_flag, resize_factor = get_resize_flag_factor(img, threshold = 4000000)
-        
+        # resize_flag, resize_factor = get_resize_flag_factor(img, threshold = 4000000)
+        resize_flag, resize_factor = get_resize_flag_factor_with_max_dim(img, max_dim = 900) # Modified 20221011 - Fix max dimension to 900 pixels either side
         if resize_flag:
             dim = (int(img.shape[1] * resize_factor), int(img.shape[0] * resize_factor))
             img = cv2.resize(img, (dim))
@@ -44,13 +44,12 @@ class HSVTreeCountDetector:
         min_hsv = np.array([hsv_thresh.h_low, hsv_thresh.s_low, hsv_thresh.v_low])
         max_hsv = np.array([hsv_thresh.h_high, hsv_thresh.s_high, hsv_thresh.v_high])
         thresh = cv2.inRange(hsv, min_hsv, max_hsv)
-        
         # Median Blur to remove salt and pepper noise
         thresh = cv2.medianBlur(thresh, 3)
 
         # Morphology closing
-        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (5,5)), iterations = 3)
-        
+        # thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (5,5)), iterations = 3)
+        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (5,5)), iterations = 2)
         # Get External contours
         cnts, hierarchy = cv2.findContours(thresh, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE) # Added 20221009 - Change RETR_EXTERNAL to RETR_CCOMP
 
@@ -83,13 +82,13 @@ class HSVTreeCountDetector:
         
         # 2.0 Calculate Euclidean Distance from filled contours
         distance = scipy.ndimage.distance_transform_edt(img_filled_cnt)
-	
+
         # Handle case where no contours is shortlisted
         if len(r_list) == 0:
             return 0, imgOri
 
         # 2.1 Find local maximum
-        min_dist_thresh = int(min(20, np.median(r_list))) # Add min function
+        min_dist_thresh = int(min(22, np.median(r_list))) # Add min function
         coords = peak_local_max(distance, footprint = np.ones((3,3)), min_distance = min_dist_thresh, labels = img_filled_cnt)
 
         # 2.2 Fill local maximum into mask
@@ -119,23 +118,26 @@ class HSVTreeCountDetector:
                 tree_count += 1
 
         for x, y, w, h in box_list:
-            if resize_flag:
-                x = int(x/ resize_factor)
-                y = int(y/ resize_factor)
-                w = int(w/ resize_factor)
-                h = int(h/ resize_factor)
-                x_bottom = min(x + w, imgOri.shape[1])
-                y_bottom = min(y + h, imgOri.shape[0])
+            # if resize_flag:
+            #     x = int(x/ resize_factor)
+            #     y = int(y/ resize_factor)
+            #     w = int(w/ resize_factor)
+            #     h = int(h/ resize_factor)
+            #     x_bottom = min(x + w, imgOri.shape[1])
+            #     y_bottom = min(y + h, imgOri.shape[0])
             
-                cv2.rectangle(imgOri, (x, y), (x_bottom, y_bottom), (0, 0, 255), 3)
-            else:
-                cv2.rectangle(imgOri, (x, y), (x + w, y + h), (0, 0, 255), 3)
+            #     cv2.rectangle(imgOri, (x, y), (x_bottom, y_bottom), (0, 0, 255), 3)
+            # else:
+            #     cv2.rectangle(imgOri, (x, y), (x + w, y + h), (0, 0, 255), 3)
+            
+            cv2.rectangle(img, (x, y), (x + w, y + h), (0, 0, 255), 2) # Modified 20221011 - Reduce line thickness
 
         # Resize output image - Added 20221004 - Reduce API response time
-        if resize_flag:
-            imgOri = cv2.resize(imgOri, (dim))
+        # if resize_flag:
+        #    imgOri = cv2.resize(imgOri, (dim))
 
-        return tree_count, imgOri
+        # return tree_count, imgOri
+        return tree_count, img # Changed 20221011 - work on resized image
 
 def predict_tree_count(img):
     """
@@ -174,4 +176,21 @@ def get_resize_flag_factor(img, threshold):
         resize_flag = True
         resize_factor = 0.6
 
+    return resize_flag, resize_factor
+
+def get_resize_flag_factor_with_max_dim(img, max_dim):
+    """
+    Resize width and height of image by max dim
+
+    Returns:
+        resize_flag: True or False
+        max_dim: # of pixels
+    """
+    
+    resize_flag = True
+
+    height, width = img.shape[:2]
+    ori_max_dim = max(height, width)
+    resize_factor = float(max_dim/ ori_max_dim)
+    
     return resize_flag, resize_factor
